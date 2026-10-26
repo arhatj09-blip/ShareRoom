@@ -1,185 +1,302 @@
 # ShareRoom
 
-ShareRoom is a room-based remote file-sharing web application for a CNL mini-project. A sender uploads a file to the Spring Boot server, the server stores it temporarily, and the intended recipient downloads it from the same web application. There is no WebRTC, peer-to-peer transfer, cloud object storage, or password authentication in this mini-project.
+ShareRoom is a room-based remote file-sharing web application for a CNL mini-project. Users open the same website, create or join a short-lived room, select a room member, and send a file privately through a central Spring Boot server.
 
-## Architecture
+The current deployment is:
+
+- **Frontend:** Vercel
+- **Backend:** Render
+- **Database:** SQLite on the backend's persistent disk
+- **File storage:** `uploads/` on the backend's persistent disk
+- **Updates:** HTTP polling from the React dashboard
+
+There is no WebRTC, peer-to-peer transfer, cloud object storage, password authentication, or WebSocket requirement in this version.
+
+## Live architecture
 
 ```text
-React + Vite browser
-        |
-        | HTTP REST / multipart upload
-        v
-Spring Boot REST API
-        |
-        +-- SQLite metadata (rooms, members, transfers)
-        +-- uploads/ temporary file storage
+User A browser                    User B browser
+       |                                 |
+       | HTTPS                           | HTTPS
+       +-------------> Vercel <---------+
+                           |
+                           | REST and multipart requests
+                           v
+                    Render Spring Boot API
+                           |
+                  +--------+--------+
+                  |                 |
+              SQLite DB       uploads/ files
 ```
 
-The frontend is in `frontend/`; the backend is in `backend/`. The older standalone Java examples remain under `src/` for reference.
+The browser clients never connect directly to each other. This is why users can share files while connected to different networks.
 
-## Requirements
+## Repository structure
+
+```text
+ShareRoom/
+├── backend/
+│   ├── Dockerfile
+│   ├── pom.xml
+│   └── src/main/
+│       ├── java/com/shareroom/
+│       │   ├── config/
+│       │   ├── controller/
+│       │   ├── dto/
+│       │   ├── entity/
+│       │   ├── exception/
+│       │   ├── repository/
+│       │   └── service/
+│       └── resources/application.properties
+├── frontend/
+│   ├── src/main.jsx
+│   ├── src/styles.css
+│   ├── package.json
+│   └── vite.config.js
+├── render.yaml
+├── README.md
+└── src/
+    └── older standalone Java examples
+```
+
+## Features
+
+- Create a room with a display name and optional room name.
+- Generate short Room IDs such as `BLUE-4812`.
+- Join an existing room using its Room ID.
+- Host-only Close Room action.
+- Leave Room action for all members.
+- Room member list with initials and online state.
+- Private one-to-one recipient selection.
+- Drag-and-drop and file-picker uploads.
+- Animated upload progress and transfer status.
+- Inbox with sender, size, upload time, expiry, checksum status, and download action.
+- Room activity history.
+- Polling refresh every 12 seconds.
+- Loading skeletons, empty states, error states, and toast notifications.
+- Responsive desktop and mobile layouts.
+- `prefers-reduced-motion` support.
+- 25 MB maximum upload size.
+- Allowed document, image, archive, audio, video, and text formats.
+- Executable extension blocking.
+- Filename sanitization and path traversal protection.
+- SHA-256 verification after upload and before download.
+- Automatic file expiry after 24 hours.
+- Automatic inactive/empty room cleanup after 30 minutes.
+
+## Production deployment
+
+The production frontend is deployed on Vercel and the Spring Boot backend is deployed on Render. The exact public frontend domain can be configured in Vercel; the backend URL is configured through the environment variables below.
+
+### Vercel frontend
+
+Create or connect a Vercel project to this repository. Use the `frontend` directory as the project root:
+
+```text
+Root Directory: frontend
+Framework preset: Vite
+Build command: npm run build
+Output directory: dist
+```
+
+Set this Vercel environment variable for Production, Preview, and Development as needed:
+
+```text
+VITE_API_URL=https://YOUR-RENDER-BACKEND-URL.onrender.com/api
+```
+
+After changing it, redeploy Vercel. `VITE_API_URL` is embedded during the Vite build, so changing the variable does not affect an already-built deployment.
+
+### Render backend
+
+This repository includes [render.yaml](./render.yaml) and [backend/Dockerfile](./backend/Dockerfile). The Render service uses:
+
+```text
+Docker context: repository root
+Dockerfile: backend/Dockerfile
+Health check: /api/rooms/health
+```
+
+Configure these Render environment variables:
+
+```text
+PORT=8080
+CORS_ORIGINS=https://YOUR-VERCEL-DOMAIN.vercel.app
+DB_PATH=/var/data/shareroom.db
+UPLOAD_DIR=/var/data/uploads
+```
+
+Add a Render persistent disk mounted at:
+
+```text
+/var/data
+```
+
+The persistent disk is required because the application stores the SQLite database and uploaded files locally. Without it, a restart or redeploy can remove room metadata and files.
+
+After the backend is deployed, verify:
+
+```text
+https://YOUR-RENDER-BACKEND-URL.onrender.com/api/rooms/health
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+Then set `VITE_API_URL` in Vercel to the same backend URL with `/api` appended and redeploy the frontend.
+
+### Production troubleshooting
+
+If Create Room or Join Room returns `404`:
+
+1. Open the browser developer tools and inspect the failed request.
+2. The request must target:
+
+   ```text
+   https://YOUR-RENDER-BACKEND-URL.onrender.com/api/rooms
+   ```
+
+3. If it targets the Vercel domain, `VITE_API_URL` is missing or the frontend was not redeployed.
+4. If the backend health URL is not returning `{"status":"ok"}`, fix the Render service first.
+5. Confirm Render's `CORS_ORIGINS` exactly matches the Vercel origin without a trailing slash.
+
+## Local development
+
+### Requirements
 
 - Node.js 18+ and npm
 - JDK 17+
-- Maven 3.9+ (or use the already-built jar below)
+- Maven 3.9+ for rebuilding the backend
 
-## Local setup
+### Start the backend
 
-### Backend
-
-If Maven is installed and available on `PATH`:
+From the project root:
 
 ```powershell
 cd "D:\CNL miniproject\backend"
 mvn spring-boot:run
 ```
 
-If PowerShell says `mvn is not recognized`, use the already-built jar. This does not require Maven:
+If Maven is not on Windows `PATH`, run it using its full path or run a previously built jar:
 
 ```powershell
-cd "D:\CNL miniproject\backend"
+& "C:\path\to\apache-maven\bin\mvn.cmd" spring-boot:run
+```
+
+```powershell
 java -jar .\target\shareroom-backend-0.0.1-SNAPSHOT.jar
 ```
 
-Alternatively, use the Maven installation available in this workspace:
+The local API is:
 
-```powershell
-cd "D:\CNL miniproject\backend"
-& "C:\Users\Arhat\.copilot\maven\apache-maven-3.9.9\bin\mvn.cmd" spring-boot:run
+```text
+http://localhost:8080
 ```
 
-The API starts on `http://localhost:8080` by default. SQLite metadata is stored in `backend/shareroom.db`; uploaded files are stored in `backend/uploads/`.
+### Start the frontend
 
-### Frontend
-
-Open a second PowerShell window:
+Open a second terminal:
 
 ```powershell
 cd "D:\CNL miniproject\frontend"
-Copy-Item .env.example .env
 npm install
+Copy-Item .env.example .env
 npm run dev
 ```
 
-Open the Vite URL shown in the terminal, normally `http://localhost:5173`.
-
-The frontend reads `VITE_API_URL` from `.env`. For a deployed frontend, set it to the public API URL, for example `https://api.example.com/api`.
-
-### Deploying the backend separately
-
-Vercel hosts the React frontend, but it does not run this Spring Boot application. Deploy the backend to a Java/container host such as Render, Railway, Fly.io, or a VPS, then set the Vercel project's `VITE_API_URL` environment variable to the backend URL including `/api`, for example:
+Open the Vite URL, normally:
 
 ```text
-VITE_API_URL=https://shareroom-backend.example.com/api
+http://localhost:5173
 ```
 
-The repository includes [render.yaml](./render.yaml) and [backend/Dockerfile](./backend/Dockerfile) for a Render deployment. After the backend is deployed, set its `CORS_ORIGINS` environment variable to the exact Vercel URL, redeploy it, then redeploy Vercel so `VITE_API_URL` is included in the frontend build. If `VITE_API_URL` is omitted, the frontend now reports a configuration error instead of silently sending API requests to the Vercel frontend and producing a 404.
+The local frontend calls `http://localhost:8080/api` through [frontend/.env.example](./frontend/.env.example).
 
-## LAN testing
+### Local test flow
 
-Run the backend on a machine reachable by the other devices, set `CORS_ORIGINS` to the frontend origin, and start Vite with a host binding if needed:
+1. Open the frontend.
+2. Create a room with a display name.
+3. Open the frontend again in another browser window.
+4. Join using the Room ID.
+5. Select the other member.
+6. Upload a file smaller than 25 MB.
+7. Download it from the recipient's Inbox.
 
-```powershell
-npm run dev -- --host 0.0.0.0
+## Backend API
+
+Protected endpoints require the `X-Member-Id` header returned when a user creates or joins a room.
+
+```text
+GET    /api/rooms/health
+POST   /api/rooms
+POST   /api/rooms/{roomId}/join
+GET    /api/rooms/{roomId}
+GET    /api/rooms/{roomId}/members
+POST   /api/rooms/{roomId}/leave
+POST   /api/rooms/{roomId}/close
+
+POST   /api/rooms/{roomId}/transfers
+GET    /api/rooms/{roomId}/inbox
+GET    /api/rooms/{roomId}/activity
+GET    /api/rooms/{roomId}/transfers/{transferId}/download
 ```
 
-Use the host machine's LAN address from other devices. Open the same frontend URL, create a room on one browser, and join it from another browser with the displayed Room ID. Local HTTP is not encrypted; use it only on a trusted network.
+The upload endpoint accepts a multipart field named `file` and a `recipientId` query parameter.
 
-## Exact first-run checklist
+## Environment variables
 
-1. Open PowerShell window 1 and verify Java:
+### Frontend
 
-   ```powershell
-   java -version
-   ```
-
-2. Start the backend without Maven:
-
-   ```powershell
-   cd "D:\CNL miniproject\backend"
-   java -jar .\target\shareroom-backend-0.0.1-SNAPSHOT.jar
-   ```
-
-   Leave this window running. Successful startup should expose the API at `http://localhost:8080`.
-
-3. Open PowerShell window 2 and start the frontend:
-
-   ```powershell
-   cd "D:\CNL miniproject\frontend"
-   npm run dev
-   ```
-
-4. Open the URL printed by Vite, normally `http://localhost:5173`.
-
-5. Click **Create new**, enter a display name, and create a room.
-
-6. Open the same frontend URL in another browser window or another computer, choose **Join existing**, and enter the Room ID.
-
-7. Select the other member, choose a file, and click **Send**.
-
-8. Download the file from the recipient's Inbox.
-
-9. Stop each process with `Ctrl+C` in its corresponding PowerShell window.
-
-The `.env.example` files document the supported environment variables. PowerShell does not automatically load a `.env` file into a Java process, so for local defaults you can leave the files unchanged; Spring Boot uses the defaults in `application.properties`. To override a backend setting for one PowerShell session, use for example:
-
-```powershell
-$env:PORT = "8081"
-$env:CORS_ORIGINS = "http://localhost:5173"
-java -jar .\target\shareroom-backend-0.0.1-SNAPSHOT.jar
+```env
+VITE_API_URL=http://localhost:8080/api
 ```
 
-## Product flow
+For Vercel, replace the local value with the public Render API URL.
 
-1. A user creates a room with a display name. ShareRoom generates a short ID such as `BLUE-4812`.
-2. Other users join with the Room ID and a display name.
-3. Members see only users in their room.
-4. A member selects a recipient and uploads one allowed file.
-5. The backend validates membership, filename, extension, size, and recipient; then stores the file and checksum.
-6. The recipient's inbox refreshes through polling and provides a download action.
-7. Downloads are revalidated against room membership and the stored SHA-256 checksum.
-8. Files expire after 24 hours. Empty or inactive rooms are cleaned after 30 minutes.
+### Backend
 
-## File rules
+```env
+PORT=8080
+UPLOAD_DIR=uploads
+CORS_ORIGINS=http://localhost:5173
+DB_PATH=shareroom.db
+```
 
-- Maximum file size: 25 MB.
-- Common document, image, archive, and text formats are allowed.
-- Executable formats including `.exe`, `.bat`, `.cmd`, `.msi`, and `.jar` are rejected.
-- Filenames are reduced to a safe basename and unsafe characters are rejected or normalized.
-- Files are written under `uploads/`, never directly from an untrusted path.
-
-## Deployment
-
-Build the backend with `mvn clean package` and run the generated jar. Build the frontend with `npm run build` and serve `frontend/dist` from a static host. Configure `VITE_API_URL` to the public backend URL and configure the backend CORS origin to the deployed frontend origin. The deployment platform or a reverse proxy should terminate HTTPS. Do not expose plain local-development HTTP to the public internet.
-
-For production, use a persistent database, private storage, stronger authentication, rate limiting, antivirus scanning, and a managed object store. Those are intentionally outside this college mini-project's scope.
+Environment files are examples only. Do not commit credentials or private deployment values.
 
 ## CNL viva notes
 
-### TCP and HTTP
+### HTTP and TCP
 
-HTTP is an application-layer protocol carried over TCP in the normal deployment. The browser sends REST requests and a multipart file body; Spring Boot parses and validates it. TCP provides ordered, reliable delivery between browser and server. Unlike the older desktop demo, this version does not implement a custom UDP protocol.
+The browser communicates with Spring Boot through HTTP REST requests. Normal HTTP deployment runs over TCP, which provides reliable, ordered delivery. File uploads use HTTP multipart form data. Unlike the older desktop example, this web version does not implement a custom UDP protocol.
 
 ### Client-server architecture
 
-The React application is the client. Spring Boot is the central server. The server owns room membership, authorization checks, metadata, temporary storage, and checksums, so users can connect from different networks after deployment.
+React is the client and Spring Boot is the central server. The server owns room membership, authorization checks, metadata, temporary storage, and checksums. Both users connect to the public server, so they do not need to be on the same LAN.
 
-### Room IDs
+### Room IDs and isolation
 
-The short Room ID is a human-friendly lookup key. Internal database records use UUIDs. Every protected operation also carries a member identity and checks that the member belongs to the requested room, which isolates files between rooms.
+Room IDs are short human-friendly lookup codes. Database records use UUIDs internally. Every protected operation validates that the supplied member belongs to the requested room. Transfers also validate the intended recipient.
 
 ### NAT
 
-On a private LAN, NAT gives devices private addresses and usually prevents unsolicited inbound traffic. A public deployment avoids requiring users to port-forward: every browser makes an outbound HTTPS connection to the deployed server. A reverse proxy or hosting platform can provide the public address.
+Private networks commonly use NAT, which makes direct inbound connections difficult. This application avoids peer-to-peer networking: both browsers make outbound HTTPS connections to Render, so no port forwarding is required.
 
 ### HTTPS
 
-Plain HTTP exposes metadata and file contents to network observers. HTTPS encrypts the connection and should be provided by the deployment platform or reverse proxy. SHA-256 checks integrity but is not encryption or authentication.
+Vercel and Render can provide HTTPS for deployed traffic. HTTPS encrypts the connection. Local development HTTP is not encrypted and should only be used on a trusted machine or LAN.
 
 ### Validation and hashing
 
-The server validates room membership, recipient membership, content length, extension, safe filename, and storage path. It calculates SHA-256 after upload and again before download so corrupted or unexpectedly modified files are not served as verified files.
+The backend validates room membership, recipient membership, file size, extension, filename, and storage path. It calculates SHA-256 after upload and recalculates it before download. SHA-256 verifies integrity; it is not encryption and does not authenticate a user.
 
 ### Temporary storage
 
-Metadata is stored in SQLite and file bytes are stored in `uploads/`. A scheduled cleanup removes expired files after 24 hours and inactive/empty rooms after 30 minutes. This keeps the mini-project simple while making its retention behavior explicit.
+SQLite stores room, member, and transfer metadata. File bytes are stored in the backend `uploads/` directory. A scheduled job deletes expired files after 24 hours and closes inactive or empty rooms after 30 minutes. Render's persistent disk keeps this local state across service restarts.
+
+## Scope and future improvements
+
+This is a college mini-project using display names rather than full authentication. It intentionally does not include payments, email verification, OAuth, cloud object storage, or enterprise identity management. A production system should add stronger authentication, rate limiting, malware scanning, PostgreSQL, managed object storage, and more detailed audit logging.
