@@ -13,6 +13,9 @@ const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '').re
 const sessionKey = 'shareroom-session';
 
 const api = async (path, options = {}) => {
+  if (!API_URL) {
+    throw new Error('Backend URL is not configured. Set VITE_API_URL in the Vercel project settings.');
+  }
   const response = await fetch(`${API_URL}/api${path}`, options);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.message || data.error || `Request failed (${response.status})`);
@@ -140,6 +143,10 @@ function Dashboard({ session, onLeave, notify }) {
         const body = new FormData(); body.append('file', file);
         const result = await new Promise((resolve, reject) => {
           const request = new XMLHttpRequest();
+          if (!API_URL) {
+            reject(new Error('Backend URL is not configured. Set VITE_API_URL in the Vercel project settings.'));
+            return;
+          }
           request.open('POST', `${API_URL}/api/rooms/${encodeURIComponent(roomId)}/transfers?recipientId=${encodeURIComponent(recipient.id || recipient.memberId)}`);
           request.setRequestHeader('X-Member-Id', memberId);
           request.upload.onprogress = (event) => {

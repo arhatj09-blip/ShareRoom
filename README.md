@@ -65,6 +65,16 @@ Open the Vite URL shown in the terminal, normally `http://localhost:5173`.
 
 The frontend reads `VITE_API_URL` from `.env`. For a deployed frontend, set it to the public API URL, for example `https://api.example.com/api`.
 
+### Deploying the backend separately
+
+Vercel hosts the React frontend, but it does not run this Spring Boot application. Deploy the backend to a Java/container host such as Render, Railway, Fly.io, or a VPS, then set the Vercel project's `VITE_API_URL` environment variable to the backend URL including `/api`, for example:
+
+```text
+VITE_API_URL=https://shareroom-backend.example.com/api
+```
+
+The repository includes [render.yaml](./render.yaml) and [backend/Dockerfile](./backend/Dockerfile) for a Render deployment. After the backend is deployed, set its `CORS_ORIGINS` environment variable to the exact Vercel URL, redeploy it, then redeploy Vercel so `VITE_API_URL` is included in the frontend build. If `VITE_API_URL` is omitted, the frontend now reports a configuration error instead of silently sending API requests to the Vercel frontend and producing a 404.
+
 ## LAN testing
 
 Run the backend on a machine reachable by the other devices, set `CORS_ORIGINS` to the frontend origin, and start Vite with a host binding if needed:

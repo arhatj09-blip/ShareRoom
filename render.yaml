@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: shareroom-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/rooms/health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: CORS_ORIGINS
+        sync: false
+      - key: DB_PATH
+        value: /var/data/shareroom.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+    disk:
+      name: shareroom-data
+      mountPath: /var/data
+      sizeGB: 1

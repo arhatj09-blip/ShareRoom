@@ -12,6 +12,7 @@ import java.util.*;
 public class RoomController {
  private final RoomService service;
  public RoomController(RoomService s){service=s;}
+ @GetMapping("/health") public Map<String,String> health(){return Map.of("status","ok");}
  @PostMapping public RoomResponse create(@Valid @RequestBody CreateRoomRequest request){return service.create(request);}
  @PostMapping("/{roomId}/join") public RoomResponse join(@PathVariable String roomId,@Valid @RequestBody JoinRequest request){return service.join(roomId,request);}
  @GetMapping("/{roomId}") public Map<String,Object> details(@PathVariable String roomId,@RequestHeader("X-Member-Id") UUID memberId){
