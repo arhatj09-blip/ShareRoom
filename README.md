@@ -146,6 +146,8 @@ Expected response:
 {"status":"ok"}
 ```
 
+Opening the backend root URL itself is also supported and returns a small JSON service description. It is an API service, not the browser interface; use the Vercel URL to open the ShareRoom website.
+
 Then set `VITE_API_URL` in Vercel to the same backend URL with `/api` appended and redeploy the frontend.
 
 ### Production troubleshooting
@@ -168,7 +170,7 @@ If Create Room or Join Room returns `404`:
 ### Requirements
 
 - Node.js 18+ and npm
-- JDK 17+
+- JDK 25+
 - Maven 3.9+ for rebuilding the backend
 
 ### Start the backend
